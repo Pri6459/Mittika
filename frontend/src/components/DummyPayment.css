@@ -1,0 +1,175 @@
+.dummy-payment {
+  width: 420px;
+  margin: 60px auto;
+  text-align: center;
+  background: linear-gradient(to bottom right, #f8f3ef, #fdfaf9);
+  border-radius: 14px;
+  padding: 30px 25px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  font-family: "Poppins", sans-serif;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dummy-payment:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.dummy-payment h2 {
+  font-size: 1.8rem;
+  color: #532b19;
+  margin-bottom: 10px;
+}
+
+.dummy-payment p {
+  font-size: 1.05rem;
+  color: #5a3f31;
+  margin: 6px 0;
+}
+
+.selected-products {
+  list-style: none;
+  margin: 22px 0;
+  padding: 0;
+  text-align: left;
+}
+
+.selected-products li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5d8cc;
+  color: #362417;
+}
+
+/* --- Buttons --- */
+.pay-btn,
+.cancel-btn {
+  border: none;
+  padding: 10px 22px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  margin: 10px;
+  font-weight: 600;
+  transition: all 0.25s ease-in-out;
+}
+
+/* Main Pay button */
+.pay-btn {
+  background-color: #8a4f31;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(138, 79, 49, 0.3);
+}
+
+.pay-btn:hover {
+  background-color: #a85b36;
+  box-shadow: 0 6px 15px rgba(138, 79, 49, 0.4);
+}
+
+/* Cancel button */
+.cancel-btn {
+  background-color: #777;
+  color: white;
+  box-shadow: 0 4px 10px rgba(80, 80, 80, 0.3);
+}
+
+.cancel-btn:hover {
+  background-color: #5e5e5e;
+  box-shadow: 0 6px 15px rgba(80, 80, 80, 0.4);
+}
+
+/* --- Status Texts --- */
+.success,
+.failed {
+  margin-top: 25px;
+  font-size: 1.2rem;
+  border-radius: 8px;
+  padding: 12px 18px;
+  display: inline-block;
+  animation: fadeIn 0.6s ease;
+}
+
+/* Success view */
+.success {
+  color: #1e7016;
+  background: rgba(146, 199, 131, 0.2);
+  border: 1px solid #87c37b;
+}
+
+/* Failure view */
+.failed {
+  color: #c0392b;
+  background: rgba(255, 180, 180, 0.25);
+  border: 1px solid #e57373;
+}
+
+/* --- Loading / Processing --- */
+.dummy-payment p:contains("Processing Payment") {
+  font-style: italic;
+  color: #8a4f31;
+  animation: pulse 1.2s infinite ease-in-out;
+}
+
+/* --- Animations --- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.7;
+  }
+}
+
+/* Mobile responsive tweaks */
+@media (max-width: 480px) {
+  .dummy-payment {
+    width: 90%;
+    padding: 25px 15px;
+  }
+
+  .dummy-payment h2 {
+    font-size: 1.5rem;
+  }
+
+  .pay-btn,
+  .cancel-btn {
+    font-size: 0.9rem;
+    padding: 8px 16px;
+  }
+}
+
+.selected-products {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 20px;
+  font-size: 0.95rem;
+  color: #5a3f31;
+  text-align: left;
+  display: inline-block;
+}
+
+.selected-products li {
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
