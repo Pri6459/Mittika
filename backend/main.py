@@ -36,7 +36,14 @@ app = FastAPI(title="Craftly API", version="1.0.0", lifespan=lifespan)
 # 🔥 Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"],
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://localhost:3001,http://localhost:5173,https://mittika-36f05.web.app",
+        ).split(",")
+        if origin.strip()
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
