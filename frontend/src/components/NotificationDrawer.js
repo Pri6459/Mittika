@@ -5,8 +5,14 @@ import { useLanguage } from '../utils/LanguageContext';
 import { useTranslatedValues } from '../utils/useTranslatedValues';
 
 const NotificationCard = ({ item, getIcon }) => {
-  const { t } = useLanguage();
+  const { t, currentLang } = useLanguage();
   const { values, error, isTranslating } = useTranslatedValues([item.title, item.message]);
+  const timestampValue = Date.parse(item.timestamp);
+  const timestamp = Number.isNaN(timestampValue)
+    ? item.timestamp
+    : new Date(timestampValue).toLocaleString(
+      currentLang === "hi" ? "hi-IN" : currentLang === "mr" ? "mr-IN" : "en-IN"
+    );
 
   return (
     <div
@@ -23,7 +29,7 @@ const NotificationCard = ({ item, getIcon }) => {
           <h5 style={styles.notifTitle}>
             {values[0] || (isTranslating ? t.translatingProduct : t.productTranslationUnavailable)}
           </h5>
-          <span style={styles.timestamp}>{item.timestamp}</span>
+          <span style={styles.timestamp}>{timestamp}</span>
         </div>
         <p style={styles.notifMsg}>
           {values[1] || (isTranslating ? t.translatingProduct : t.productTranslationUnavailable)}
@@ -34,30 +40,39 @@ const NotificationCard = ({ item, getIcon }) => {
   );
 };
 
-const NotificationDrawer = ({ isOpen, onClose, role = 'customer' }) => {
+const NotificationDrawer = ({ isOpen, onClose, user }) => {
   const { t } = useLanguage();
   const [notifications, setNotifications] = useState([]);
   const [activeTab, setActiveTab] = useState('all');
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await API.get(`/ml/notifications?role=${role}`);
+      const res = await API.get("/ml/notifications");
       setNotifications(res.data || []);
     } catch (err) {
       console.error("Error fetching notifications:", err);
     }
-  }, [role]);
+  }, []);
 
   useEffect(() => {
-    if (isOpen) fetchNotifications();
-  }, [isOpen, fetchNotifications]);
+    if (isOpen && user) fetchNotifications();
+    if (!isOpen || !user) return undefined;
+    const intervalId = window.setInterval(fetchNotifications, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [isOpen, user, fetchNotifications]);
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const markAllAsRead = async () => {
+    try {
+      await API.post("/ml/notifications/read");
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      window.dispatchEvent(new Event("mittika:notifications-updated"));
+    } catch (error) {
+      console.error("Could not mark notifications as read:", error);
+    }
   };
 
   const getIcon = (type) => {
-    if (type === 'price_drop') return <FaTag style={{ color: '#D97706' }} />;
+    if (type === 'price_drop' || type === 'price_update') return <FaTag style={{ color: '#D97706' }} />;
     if (type === 'shipping' || type === 'order') return <FaTruck style={{ color: '#0D9488' }} />;
     if (type === 'inventory') return <FaExclamationTriangle style={{ color: '#DC2626' }} />;
     return <FaRobot style={{ color: '#C85A32' }} />;
@@ -66,7 +81,7 @@ const NotificationDrawer = ({ isOpen, onClose, role = 'customer' }) => {
   const filteredNotifs = notifications.filter((n) => {
     if (activeTab === 'all') return true;
     if (activeTab === 'orders') return n.type === 'order' || n.type === 'shipping';
-    if (activeTab === 'alerts') return n.type === 'price_drop' || n.type === 'inventory';
+    if (activeTab === 'alerts') return n.type === 'price_drop' || n.type === 'price_update' || n.type === 'inventory';
     return true;
   });
 

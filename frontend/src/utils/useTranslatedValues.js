@@ -6,7 +6,7 @@ const translationCache = new Map();
 const pendingTranslations = new Map();
 let queuedTranslations = [];
 let flushScheduled = false;
-const TRANSLATION_CATALOG_VERSION = "reviewed-copy-v5";
+const TRANSLATION_CATALOG_VERSION = "google-cloud-translation-v9";
 
 const translationKey = (language, text) => JSON.stringify([TRANSLATION_CATALOG_VERSION, language, text]);
 

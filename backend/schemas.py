@@ -17,6 +17,10 @@ class UserOut(BaseModel):
     name: str
     email: str
     userType: str
+    location: Optional[str] = None
+    experience: Optional[int] = None
+    craft: Optional[str] = None
+    profilePhoto: Optional[str] = None
 
 class TokenResponse(BaseModel):
     token: str

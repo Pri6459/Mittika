@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import VoiceSearchModal from './components/VoiceSearchModal';
 import DummyPayment from './components/DummyPayment';
 import ProductCard from './components/ProductCard';
+import Signup from './components/Signup';
+import Dashboard from './components/Dashboard';
 import { LanguageContext } from './utils/LanguageContext';
 import API from './api';
 
@@ -10,6 +12,8 @@ beforeEach(() => {
   localStorage.clear();
   API.get.mockReset();
   API.post.mockReset();
+  API.get.mockResolvedValue({ data: { artisans: [] } });
+  API.post.mockResolvedValue({ data: {} });
 });
 
 jest.mock('./api', () => ({
@@ -24,6 +28,68 @@ jest.mock('./api', () => ({
 import App from './App';
 import { categoryForSearch } from './utils/translations';
 
+test('artisan signup collects artisan profile details and uploads a photo', async () => {
+  const alert = jest.spyOn(window, 'alert').mockImplementation(() => {});
+  render(
+    <MemoryRouter>
+      <LanguageContext.Provider value="en">
+        <Signup />
+      </LanguageContext.Provider>
+    </MemoryRouter>
+  );
+
+  fireEvent.change(screen.getByLabelText('Full Name'), { target: { value: 'Asha Maker' } });
+  fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'asha@example.com' } });
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'artisan-pass' } });
+  fireEvent.change(screen.getByLabelText('Account Type'), { target: { value: 'artisan' } });
+  fireEvent.change(screen.getByLabelText('City, state, or region'), { target: { value: 'Pune, Maharashtra' } });
+  fireEvent.change(screen.getByLabelText('Years of experience'), { target: { value: '8' } });
+  fireEvent.change(screen.getByLabelText('Craft or specialty'), { target: { value: 'Handmade jewellery' } });
+  const photo = new File(['artisan-photo'], 'asha.png', { type: 'image/png' });
+  fireEvent.change(screen.getByLabelText('Profile photo'), { target: { files: [photo] } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+
+  await waitFor(() => expect(alert).toHaveBeenCalledWith('Account created successfully!'));
+  alert.mockRestore();
+  const [path, formData] = API.post.mock.calls[0];
+  expect(path).toBe('/auth/artisan-signup');
+  expect(formData.get('name')).toBe('Asha Maker');
+  expect(formData.get('location')).toBe('Pune, Maharashtra');
+  expect(formData.get('experience')).toBe('8');
+  expect(formData.get('craft')).toBe('Handmade jewellery');
+  expect(formData.get('profile_photo')).toBe(photo);
+});
+
+test('homepage shows artisan cards with their profile photo and details', async () => {
+  API.get.mockResolvedValue({
+    data: {
+      artisans: [{
+        id: 'artisan-1',
+        name: 'Asha Maker',
+        location: 'Pune, Maharashtra',
+        experience: 8,
+        craft: 'Handmade jewellery',
+        profilePhoto: '/uploads/artisans/asha.png'
+      }]
+    }
+  });
+  render(
+    <MemoryRouter>
+      <LanguageContext.Provider value="en">
+        <Dashboard />
+      </LanguageContext.Provider>
+    </MemoryRouter>
+  );
+
+  expect(await screen.findByRole('heading', { name: 'Meet Our Artisans' })).toBeInTheDocument();
+  expect(screen.getByRole('img', { name: 'Asha Maker' })).toHaveAttribute(
+    'src',
+    'http://127.0.0.1:8000/uploads/artisans/asha.png'
+  );
+  expect(screen.getByText('Pune, Maharashtra')).toBeInTheDocument();
+  expect(screen.getByText('Handmade jewellery')).toBeInTheDocument();
+});
+
 test('renders the storefront hero heading', () => {
   render(<App />);
   expect(screen.getByText(/Crafted by Earth, Shaped by Hand\./i)).toBeInTheDocument();
@@ -36,8 +102,27 @@ test('switches storefront content to the selected language and remembers it', ()
   fireEvent.change(screen.getByRole('combobox'), { target: { value: 'hi' } });
 
   expect(screen.getByText('मिट्टी से निर्मित, कारीगरों के हाथों से तराशा हुआ।')).toBeInTheDocument();
-  expect(screen.getByText('भारतीय कला रूप')).toBeInTheDocument();
+  expect(screen.queryByText('भारतीय कला रूप')).not.toBeInTheDocument();
   expect(localStorage.getItem('mittika_language')).toBe('hi');
+});
+
+test('shows a notification after adding a product to cart and wishlist', async () => {
+  localStorage.setItem('token', 'customer-token');
+  API.get.mockResolvedValue({
+    data: { user: { userType: 'customer' } }
+  });
+  API.post.mockResolvedValue({ data: {} });
+
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('link', { name: 'Jewellery' }));
+  fireEvent.click((await screen.findAllByRole('button', { name: 'Add to Cart' }))[0]);
+  expect(await screen.findByText('Product added to cart.')).toBeInTheDocument();
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Wishlist' })[0]);
+  expect(await screen.findByText('Product added to wishlist.')).toBeInTheDocument();
+  expect(API.post).toHaveBeenCalledWith('/cart', expect.any(Object));
+  expect(API.post).toHaveBeenCalledWith('/wishlist', expect.any(Object));
 });
 
 test('starts speech recognition from the microphone action and submits its transcript', () => {
@@ -164,7 +249,8 @@ test.each([
   ['Rukhwat Art', 'rukhwat'],
   ['Candle and Resin Art', 'candle'],
   ['Spiritual Art', 'spiritual'],
-  ['Home Decor', 'home']
+  ['Home Decor', 'home'],
+  ['Macrame & Woodwork', 'home']
 ])('maps multilingual query "%s" to %s', (query, category) => {
   expect(categoryForSearch(query)).toBe(category);
 });

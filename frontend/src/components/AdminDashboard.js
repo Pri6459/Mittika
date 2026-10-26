@@ -24,7 +24,7 @@ const AdminDashboard = () => {
   const statCards = [
     { title: "Total Users", count: analytics?.activeUsersCount || 1420, icon: <FaUsers />, color: '#0D9488' },
     { title: "Active Artisans", count: analytics?.totalArtisansCount || 380, icon: <FaStore />, color: '#C85A32' },
-    { title: "AI Model Accuracy", count: `${analytics?.accuracyScore || 96.4}%`, icon: <FaRobot />, color: '#D97706' },
+    { title: "AI Model Accuracy", count: analytics?.accuracyScore != null ? `${analytics.accuracyScore}%` : "Not measured", icon: <FaRobot />, color: '#D97706' },
     { title: "Platform GMV", count: `₹${(analytics?.totalRevenue || 482500).toLocaleString()}`, icon: <FaRupeeSign />, color: '#059669' }
   ];
 
@@ -47,7 +47,7 @@ const AdminDashboard = () => {
           <p style={styles.bannerSubtitle}>Real-time Monitoring of AI Engine Accuracy, Artisans, and Platform Metrics</p>
         </div>
         <div style={styles.modelBadge}>
-          <FaRobot style={{ marginRight: 6 }} /> {analytics?.modelName || "Mittika CNN + NLP Hybrid Engine v2.4"}
+          <FaRobot style={{ marginRight: 6 }} /> {analytics?.modelName || "Mittika Keyword Product Classifier"}
         </div>
       </div>
 

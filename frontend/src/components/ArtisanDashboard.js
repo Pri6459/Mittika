@@ -1,10 +1,20 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import API from "../api";
+import { backendUrl } from "../utils/backendUrl";
 import { categoryForSearch } from "../utils/translations";
 import { useLanguage } from "../utils/LanguageContext";
 import { useTranslatedValues } from "../utils/useTranslatedValues";
 
-const ArtisanProductCard = ({ product, onDelete, getCategoryLabel }) => {
+const ArtisanProductCard = ({
+  product,
+  onDelete,
+  onStartPriceEdit,
+  onSavePrice,
+  onCancelPriceEdit,
+  editingPrice,
+  isSavingPrice,
+  getCategoryLabel
+}) => {
   const { t } = useLanguage();
   const { values, error, isTranslating } = useTranslatedValues([
     product.title || product.name || "",
@@ -38,6 +48,36 @@ const ArtisanProductCard = ({ product, onDelete, getCategoryLabel }) => {
       </h4>
       {error && <p role="status">{t.translationFailed}</p>}
       <p><strong>{t.price}:</strong> ₹{product.price}</p>
+      {editingPrice !== null ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSavePrice(product.id);
+          }}
+          style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "8px" }}
+        >
+          <label htmlFor={`price-${product.id}`}>{t.editPrice}:</label>
+          <input
+            id={`price-${product.id}`}
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={editingPrice}
+            onChange={(event) => onStartPriceEdit(product.id, event.target.value)}
+            required
+          />
+          <button type="submit" disabled={isSavingPrice}>
+            {isSavingPrice ? t.saving : t.save}
+          </button>
+          <button type="button" onClick={onCancelPriceEdit} disabled={isSavingPrice}>
+            {t.cancel}
+          </button>
+        </form>
+      ) : (
+        <button type="button" onClick={() => onStartPriceEdit(product.id, String(product.price))}>
+          {t.editPrice}
+        </button>
+      )}
       <p><strong>{t.category}:</strong> {getCategoryLabel(product.category)}</p>
       <p><strong>{t.artisan}:</strong> {product.artisan_name} ({product.location})</p>
       <p>
@@ -67,6 +107,8 @@ const ArtisanDashboard = ({ handleLogout }) => {
   const [note, setNote] = useState("");
   const [status, setStatus] = useState(null);
   const [products, setProducts] = useState([]);
+  const [editingPrice, setEditingPrice] = useState(null);
+  const [savingPriceId, setSavingPriceId] = useState(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [productError, setProductError] = useState("");
 
@@ -150,8 +192,8 @@ const ArtisanDashboard = ({ handleLogout }) => {
 
   const [aiPrediction, setAiPrediction] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const predictionRequestRef = useRef(0);
 
-  // Trigger AI Categorization Engine on form change
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     const updated = { ...productForm, [name]: value };
@@ -159,31 +201,42 @@ const ArtisanDashboard = ({ handleLogout }) => {
 
     if (name === "name" || name === "description") {
       if (updated.name.length > 2) {
-        predictCategoryWithAI(updated.name, updated.description);
+        predictCategoryWithAI(updated.name, updated.description, updated.image?.name || "");
+      } else {
+        predictionRequestRef.current += 1;
+        setAiPrediction(null);
+        setAiLoading(false);
       }
     }
   };
 
-  const predictCategoryWithAI = async (title, description) => {
+  const predictCategoryWithAI = async (title, description, imageName = "") => {
+    const requestId = ++predictionRequestRef.current;
+    setAiPrediction(null);
     setAiLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/ml/categorize", {
+      const res = await fetch(backendUrl("/ml/categorize"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title,
           description: description || "",
-          image_name: productForm.name
+          image_name: imageName
         })
       });
-      if (res.ok) {
-        const data = await res.json();
+      if (!res.ok) {
+        throw new Error(`Category prediction failed with status ${res.status}`);
+      }
+      const data = await res.json();
+      if (requestId === predictionRequestRef.current) {
         setAiPrediction(data);
       }
     } catch (err) {
       console.warn("AI categorization notice:", err);
     } finally {
-      setAiLoading(false);
+      if (requestId === predictionRequestRef.current) {
+        setAiLoading(false);
+      }
     }
   };
 
@@ -191,6 +244,9 @@ const ArtisanDashboard = ({ handleLogout }) => {
     const file = e.target.files[0];
     if (!file) return;
     setProductForm((prev) => ({ ...prev, image: file }));
+    if (productForm.name.length > 2) {
+      predictCategoryWithAI(productForm.name, productForm.description, file.name);
+    }
   };
 
   const applyAiCategory = () => {
@@ -251,6 +307,41 @@ const ArtisanDashboard = ({ handleLogout }) => {
     } catch (error) {
       console.error(error);
       showStatus(t.productDeleteFailed, "error");
+    }
+  };
+
+  const startPriceEdit = (id, price) => {
+    setEditingPrice({ id, value: price });
+  };
+
+  const saveProductPrice = async (id) => {
+    if (!editingPrice || editingPrice.id !== id) return;
+    const price = Number(editingPrice.value);
+    if (!Number.isFinite(price) || price <= 0) {
+      showStatus(t.invalidProductPrice, "error");
+      return;
+    }
+
+    setSavingPriceId(id);
+    try {
+      const response = await API.put(`/artisan/products/${id}/price`, { price });
+      setProducts((current) =>
+        current.map((product) => product.id === id ? response.data.product : product)
+      );
+      setEditingPrice(null);
+      showStatus(
+        !response.data.priceChanged
+          ? t.priceUnchanged
+          : response.data.notifiedShoppers > 0
+            ? t.priceUpdateNotified
+            : t.priceUpdated,
+        "success"
+      );
+    } catch (error) {
+      console.error(error);
+      showStatus(getProductErrorMessage(error, t.priceUpdateFailed), "error");
+    } finally {
+      setSavingPriceId(null);
     }
   };
 
@@ -392,7 +483,6 @@ const ArtisanDashboard = ({ handleLogout }) => {
                 required
               />
             </div>
-            {/* AI Product Categorization Engine Widget (CNN + NLP Hybrid) */}
             {aiPrediction && (
               <div style={{
                 backgroundColor: "#FAF5EE",
@@ -411,23 +501,29 @@ const ArtisanDashboard = ({ handleLogout }) => {
                 <div style={{ height: "6px", backgroundColor: "#EFE5D8", borderRadius: "3px", margin: "6px 0", overflow: "hidden" }}>
                   <div style={{ height: "100%", width: `${aiPrediction.confidence * 100}%`, backgroundColor: "#C85A32" }}></div>
                 </div>
-                <button
-                  type="button"
-                  onClick={applyAiCategory}
-                  style={{
-                    backgroundColor: "#C85A32",
-                    color: "#FFF",
-                    border: "none",
-                    padding: "4px 10px",
-                    borderRadius: "6px",
-                    fontSize: "12px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                    marginTop: "4px"
-                  }}
-                >
-                  ✨ {t.applyPredictedCategory}
-                </button>
+                {categoryForSearch(aiPrediction.predictedCategory) ? (
+                  <button
+                    type="button"
+                    onClick={applyAiCategory}
+                    style={{
+                      backgroundColor: "#C85A32",
+                      color: "#FFF",
+                      border: "none",
+                      padding: "4px 10px",
+                      borderRadius: "6px",
+                      fontSize: "12px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      marginTop: "4px"
+                    }}
+                  >
+                    ✨ {t.applyPredictedCategory}
+                  </button>
+                ) : (
+                  <div role="status" style={{ marginTop: "4px" }}>
+                    {t.aiCategoryUncertain}
+                  </div>
+                )}
               </div>
             )}
 
@@ -522,6 +618,11 @@ const ArtisanDashboard = ({ handleLogout }) => {
                   key={product.id}
                   product={product}
                   onDelete={deleteProduct}
+                  onStartPriceEdit={startPriceEdit}
+                  onSavePrice={saveProductPrice}
+                  onCancelPriceEdit={() => setEditingPrice(null)}
+                  editingPrice={editingPrice?.id === product.id ? editingPrice.value : null}
+                  isSavingPrice={savingPriceId === product.id}
                   getCategoryLabel={getCategoryLabel}
                 />
               ))

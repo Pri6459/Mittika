@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 from ml_instance import ml_engine
+from auth_utils import get_shopper_user
+from config import get_database
 
 router = APIRouter(prefix="/ml", tags=["ML"])
 
@@ -32,8 +34,35 @@ async def categorize_product(body: CategorizeRequest):
     )
 
 @router.get("/notifications")
-async def get_notifications(role: str = Query("customer")):
-    return ml_engine.get_ai_notifications(role=role)
+async def get_notifications(current_user=Depends(get_shopper_user), db=Depends(get_database)):
+    user_id = str(current_user["_id"])
+    notifications = await db["notifications"].find({"userId": user_id}).to_list(None)
+    notifications.sort(key=lambda item: item.get("timestamp", ""), reverse=True)
+    return [
+        {
+            "id": str(item["_id"]),
+            "title": item["title"],
+            "message": item["message"],
+            "timestamp": item["timestamp"],
+            "type": item["type"],
+            "priority": item.get("priority", "medium"),
+            "read": item.get("read", False),
+        }
+        for item in notifications[:100]
+    ]
+
+
+@router.post("/notifications/read")
+async def mark_notifications_read(current_user=Depends(get_shopper_user), db=Depends(get_database)):
+    user_id = str(current_user["_id"])
+    notifications = await db["notifications"].find({"userId": user_id}).to_list(None)
+    for notification in notifications:
+        if not notification.get("read", False):
+            await db["notifications"].update_one(
+                {"_id": notification["_id"], "userId": user_id},
+                {"$set": {"read": True}},
+            )
+    return {"message": "Notifications marked as read"}
 
 @router.get("/recommend/{product_id}")
 async def recommend(product_id: str):
@@ -50,8 +79,8 @@ async def trending():
 @router.get("/analytics")
 async def analytics():
     return {
-        "modelName": "Mittika CNN + NLP Hybrid Classifier (v2.4)",
-        "accuracyScore": 96.4,
+        "modelName": "Mittika Keyword Product Classifier",
+        "accuracyScore": None,
         "totalCategorized": 1280,
         "trendingCategories": ml_engine.get_trending_categories(),
         "activeUsersCount": 1420,

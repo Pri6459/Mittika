@@ -1,13 +1,20 @@
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
+from pydantic import BaseModel, Field
 from config import get_database
 from schemas import NoteIn
 from auth_utils import get_artisan_user
 from bson import ObjectId
+from bson.errors import InvalidId
 import aiofiles, os, uuid
+from price_notifications import notify_shoppers_of_price_change
 
 router = APIRouter(prefix="/artisan", tags=["Artisan"])
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+class ProductPriceUpdate(BaseModel):
+    price: float = Field(gt=0, allow_inf_nan=False)
+
 
 def fmt_product(p):
     return {
@@ -47,9 +54,51 @@ async def add_product(
     doc["_id"] = result.inserted_id
     return {"product": fmt_product(doc)}
 
+@router.put("/products/{product_id}/price")
+async def update_product_price(
+    product_id: str,
+    body: ProductPriceUpdate,
+    current_user=Depends(get_artisan_user),
+    db=Depends(get_database),
+):
+    try:
+        object_id = ObjectId(product_id)
+    except InvalidId as error:
+        raise HTTPException(status_code=404, detail="Product not found") from error
+
+    product = await db["products"].find_one({
+        "_id": object_id,
+        "artisanId": str(current_user["_id"]),
+    })
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    previous_price = float(product["price"])
+    new_price = body.price
+    if previous_price == new_price:
+        return {"product": fmt_product(product), "priceChanged": False}
+
+    await db["products"].update_one(
+        {"_id": object_id, "artisanId": str(current_user["_id"])},
+        {"$set": {"price": new_price}},
+    )
+    product["price"] = new_price
+    notified_shoppers = await notify_shoppers_of_price_change(
+        product, previous_price, new_price, db
+    )
+    return {
+        "product": fmt_product(product),
+        "priceChanged": True,
+        "notifiedShoppers": notified_shoppers,
+    }
+
 @router.delete("/products/{product_id}")
 async def delete_product(product_id: str, current_user=Depends(get_artisan_user), db=Depends(get_database)):
-    result = await db["products"].delete_one({"_id": ObjectId(product_id), "artisanId": str(current_user["_id"])})
+    try:
+        object_id = ObjectId(product_id)
+    except InvalidId as error:
+        raise HTTPException(status_code=404, detail="Product not found") from error
+    result = await db["products"].delete_one({"_id": object_id, "artisanId": str(current_user["_id"])})
     if result.deleted_count == 0:
         raise HTTPException(404, "Product not found")
     return {"message": "Product deleted"}

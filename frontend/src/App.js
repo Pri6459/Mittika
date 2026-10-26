@@ -24,6 +24,8 @@ import DummyPayment from "./components/DummyPayment";
 
 import API from "./api";
 import { LanguageContext } from "./utils/LanguageContext";
+import { translations } from "./utils/translations";
+import { Toaster, toast } from "sonner";
 import './App.css';
 
 function App() {
@@ -38,6 +40,7 @@ function App() {
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [voiceSearchQuery, setVoiceSearchQuery] = useState('');
   const canShop = ["customer", "artisan"].includes(user?.userType);
+  const t = translations[currentLang] || translations.en;
 
   const setLang = (language) => {
     if (!["en", "hi", "mr"].includes(language)) return;
@@ -97,6 +100,7 @@ function App() {
         image: product.image || product.img || "",
         quantity: 1
       });
+      toast.success(t.productAddedToCart);
       return true;
     } catch (err) {
       console.error(err);
@@ -120,6 +124,7 @@ function App() {
         price,
         image: product.image || product.img || ""
       });
+      toast.success(t.productAddedToWishlist);
       return true;
     } catch (err) {
       console.error(err);
@@ -143,6 +148,7 @@ function App() {
     <Router>
       <LanguageContext.Provider value={currentLang}>
         <>
+        <Toaster position="top-right" richColors />
         <Navbar
           user={user}
           handleLogout={handleLogout}
@@ -187,7 +193,7 @@ function App() {
         <NotificationDrawer
           isOpen={isNotifOpen}
           onClose={() => setIsNotifOpen(false)}
-          role={user?.userType || "customer"}
+          user={user}
         />
 
         <Footer />

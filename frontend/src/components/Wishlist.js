@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import API from "../api";
 import { useLanguage } from "../utils/LanguageContext";
 import { useTranslatedValues } from "../utils/useTranslatedValues";
+import { backendUrl } from "../utils/backendUrl";
 import "./Wishlist.css";
 
 const resolveProductImage = (image) => {
@@ -19,11 +20,11 @@ const resolveProductImage = (image) => {
   }
 
   if (trimmed.startsWith("/uploads")) {
-    return `http://127.0.0.1:8000${trimmed}`;
+    return backendUrl(trimmed);
   }
 
   if (trimmed.startsWith("uploads/")) {
-    return `http://127.0.0.1:8000/${trimmed}`;
+    return backendUrl(trimmed);
   }
 
   return trimmed;

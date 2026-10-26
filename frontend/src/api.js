@@ -1,7 +1,8 @@
 import axios from "axios";
+import { BACKEND_BASE_URL } from "./utils/backendUrl";
 
 const API = axios.create({
-  baseURL: "http://127.0.0.1:8000",
+  baseURL: BACKEND_BASE_URL,
 });
 
 // ✅ Attach token automatically

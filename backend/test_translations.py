@@ -1,6 +1,9 @@
+import json
+import re
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import translations
 
@@ -37,26 +40,62 @@ class TranslationTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    def test_unreviewed_product_copy_stays_english_instead_of_getting_bad_translation(self):
+    def test_unreviewed_product_copy_uses_google_translation(self):
         copy = ["Handwoven Cuff Bracelet", "Handmade necklace description"]
         for language in ("hi", "mr"):
-            self.assertEqual(translations._translate_texts(copy, language), copy)
+            expected = [f"{language}:{text}" for text in copy]
+            with patch.dict("os.environ", {"GOOGLE_CLOUD_TRANSLATE_API_KEY": "test-key"}):
+                with patch("translations._google_translate", return_value=expected) as translate:
+                    self.assertEqual(translations._translate_texts(copy, language), expected)
+            translate.assert_called_once_with(copy, language, "test-key")
 
-    def test_mixes_reviewed_translations_and_english_fallback_in_original_order(self):
+    def test_mixes_reviewed_and_google_translations_in_original_order(self):
         reviewed_title = "Three-Cup Resin and Wood Tealight Holder"
         unreviewed_title = "Handwoven Cuff Bracelet"
-        translated = translations._translate_texts(
-            [reviewed_title, unreviewed_title, reviewed_title],
-            "hi",
-        )
+        with patch.dict("os.environ", {"GOOGLE_CLOUD_TRANSLATE_API_KEY": "test-key"}):
+            with patch("translations._google_translate", return_value=["हाथ से बुना कफ ब्रेसलेट"]):
+                translated = translations._translate_texts(
+                    [reviewed_title, unreviewed_title, reviewed_title],
+                    "hi",
+                )
 
         self.assertEqual(
             translated,
             [
                 "तीन टी-लाइट वाला रेज़िन और लकड़ी का होल्डर",
-                unreviewed_title,
+                "हाथ से बुना कफ ब्रेसलेट",
                 "तीन टी-लाइट वाला रेज़िन और लकड़ी का होल्डर",
             ],
+        )
+
+    def test_unreviewed_copy_requires_google_translation_configuration(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(translations.HTTPException) as error:
+                translations._translate_texts(["New artisan product"], "hi")
+
+        self.assertEqual(error.exception.status_code, 503)
+
+    def test_google_translation_decodes_entities_and_preserves_request_language(self):
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps({
+            "data": {
+                "translations": [
+                    {"translatedText": "हार &amp; कंगन"},
+                    {"translatedText": "हस्तनिर्मित आभूषण"},
+                ]
+            }
+        }).encode("utf-8")
+        texts = ["Necklace & bracelet", "Handmade jewellery"]
+
+        with patch("translations.urlopen", return_value=response) as open_url:
+            result = translations._google_translate(texts, "hi", "test-key")
+
+        self.assertEqual(result, ["हार & कंगन", "हस्तनिर्मित आभूषण"])
+        request = open_url.call_args.args[0]
+        self.assertIn("key=test-key", request.full_url)
+        self.assertEqual(
+            json.loads(request.data),
+            {"q": texts, "target": "hi", "format": "text"},
         )
 
     def test_reviewed_translations_cover_the_existing_candle_copy(self):
@@ -98,24 +137,94 @@ class TranslationTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(translated), len(titles))
             self.assertFalse(any(text == title for text, title in zip(translated, titles)))
 
-    def test_unreviewed_product_descriptions_use_english_fallback(self):
+    def test_collection_descriptions_have_reviewed_hindi_and_marathi_translations(self):
+        descriptions = [
+            "A statement necklace set with colorful Meenakari-inspired detailing, made to bring a festive touch to special occasions.",
+            "A festive platter dressed with colorful hand-finished details, ready to display or present as a thoughtful gift.",
+            "Earthy terracotta chimes bring gentle movement and a warm, handmade accent to a balcony, window, or garden.",
+            "A set of miniature divine figurines for a home shrine, prayer space, or thoughtful spiritual gift.",
+        ]
+
+        for language in ("hi", "mr"):
+            translated = translations._translate_texts(descriptions, language)
+            self.assertEqual(len(translated), len(descriptions))
+            self.assertTrue(all(text != source for text, source in zip(translated, descriptions)))
+
+    def test_all_collection_product_names_and_descriptions_are_reviewed(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        category_files = (
+            "Jewellery.js",
+            "Rukhwat.js",
+            "Pottery.js",
+            "SpiritualCorner.js",
+        )
+        source_texts = []
+        for filename in category_files:
+            source = (
+                repository_root / "frontend" / "src" / "components" / filename
+            ).read_text(encoding="utf-8")
+            source_texts.extend(
+                json.loads(value)
+                for value in re.findall(
+                    r'(?:title|description):\s*("(?:[^"\\]|\\.)*")',
+                    source,
+                )
+            )
+
+        self.assertEqual(len(source_texts), 208)
+        for language in ("hi", "mr"):
+            translated = translations._translate_texts(source_texts, language)
+            self.assertEqual(len(translated), len(source_texts))
+            self.assertTrue(
+                all(text and text != source for text, source in zip(translated, source_texts))
+            )
+
+    def test_candle_and_home_product_names_and_descriptions_are_reviewed(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        source_texts = []
+        for filename in ("Candle.js", "Home.js"):
+            source = (
+                repository_root / "frontend" / "src" / "components" / filename
+            ).read_text(encoding="utf-8")
+            source_texts.extend(
+                json.loads(value)
+                for value in re.findall(
+                    r'(?:title|description):\s*("(?:[^"\\]|\\.)*")',
+                    source,
+                )
+            )
+
+        self.assertEqual(len(source_texts), 200)
+        for language in ("hi", "mr"):
+            translated = translations._translate_texts(source_texts, language)
+            self.assertEqual(len(translated), len(source_texts))
+            self.assertTrue(
+                all(text and text != source for text, source in zip(translated, source_texts))
+            )
+
+    def test_unreviewed_product_descriptions_are_machine_translated(self):
         description = (
             "An elegant handmade piece with vibrant colors and detailed craftsmanship."
         )
 
         for language in ("hi", "mr"):
-            self.assertEqual(
-                translations._translate_texts([description], language),
-                [description],
-            )
+            expected = f"{language}:अनुवादित वर्णन"
+            with patch.dict("os.environ", {"GOOGLE_CLOUD_TRANSLATE_API_KEY": "test-key"}):
+                with patch("translations._google_translate", return_value=[expected]):
+                    self.assertEqual(
+                        translations._translate_texts([description], language),
+                        [expected],
+                    )
 
-    async def test_route_uses_english_for_unreviewed_copy(self):
+    async def test_route_translates_unreviewed_copy(self):
         request = SimpleNamespace(client=SimpleNamespace(host="test-client"))
         title = "Handmade Silver Necklace"
         body = translations.TranslationRequest(language="mr", texts=[title])
-        response = await translations.translate_texts(body, request)
+        with patch.dict("os.environ", {"GOOGLE_CLOUD_TRANSLATE_API_KEY": "test-key"}):
+            with patch("translations._google_translate", return_value=["हाताने बनवलेला चांदीचा हार"]):
+                response = await translations.translate_texts(body, request)
 
-        self.assertEqual(response.translations, [title])
+        self.assertEqual(response.translations, ["हाताने बनवलेला चांदीचा हार"])
 
     async def test_route_returns_reviewed_translation_without_machine_inference(self):
         request = SimpleNamespace(client=SimpleNamespace(host="test-client"))
@@ -139,16 +248,18 @@ class TranslationTests(unittest.IsolatedAsyncioTestCase):
             language="hi",
             texts=["First item", "Second item", "First item"],
         )
-        with patch(
-            "translations._enforce_rate_limit",
-            wraps=translations._enforce_rate_limit,
-        ):
-            response = await translations.translate_texts(body, request)
+        with patch.dict("os.environ", {"GOOGLE_CLOUD_TRANSLATE_API_KEY": "test-key"}):
+            with patch(
+                "translations._google_translate",
+                return_value=["पहला", "दूसरा"],
+            ) as translate:
+                response = await translations.translate_texts(body, request)
 
         self.assertEqual(
             response.translations,
-            ["First item", "Second item", "First item"],
+            ["पहला", "दूसरा", "पहला"],
         )
+        translate.assert_called_once_with(["First item", "Second item"], "hi", "test-key")
 
 
 if __name__ == "__main__":

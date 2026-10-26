@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import API from "../api"; // ✅ connect backend
+import API from "../api";
 import { useLanguage } from "../utils/LanguageContext";
 
 const Signup = () => {
@@ -9,23 +9,40 @@ const Signup = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [accountType, setAccountType] = useState("customer");
+  const [location, setLocation] = useState("");
+  const [experience, setExperience] = useState("");
+  const [craft, setCraft] = useState("");
+  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!name || !email || !password) {
+    if (!name.trim() || !email.trim() || !password) {
       alert(t.pleaseFillFields);
       return;
     }
 
     try {
-      // ✅ Call FastAPI backend
-      await API.post(accountType === "artisan" ? "/auth/artisan-signup" : "/auth/signup", {
-        name,
-        email,
-        password,
-      });
+      setIsSubmitting(true);
+      if (accountType === "artisan") {
+        if (!location.trim() || !experience || !craft.trim() || !profilePhoto) {
+          alert(t.pleaseFillArtisanFields);
+          return;
+        }
+        const formData = new FormData();
+        formData.append("name", name.trim());
+        formData.append("email", email.trim());
+        formData.append("password", password);
+        formData.append("location", location.trim());
+        formData.append("experience", experience);
+        formData.append("craft", craft.trim());
+        formData.append("profile_photo", profilePhoto);
+        await API.post("/auth/artisan-signup", formData);
+      } else {
+        await API.post("/auth/signup", { name, email, password });
+      }
 
       alert(t.accountCreated);
       navigate("/login");
@@ -37,6 +54,8 @@ const Signup = () => {
       } else {
         alert(t.serverNotResponding);
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -63,11 +82,12 @@ const Signup = () => {
 
           .form-box {
             background: #fffdf7;
-            padding: 3rem 2.5rem;
+            padding: clamp(1.5rem, 5vw, 3rem);
             border-radius: 1.5rem;
             box-shadow: 0 15px 35px rgba(0,0,0,0.15);
             width: 100%;
-            max-width: 450px;
+            max-width: 520px;
+            box-sizing: border-box;
           }
 
           h2 {
@@ -82,6 +102,58 @@ const Signup = () => {
             display: flex;
             flex-direction: column;
             gap: 1.2rem;
+          }
+
+          .signup-page label {
+            display: block;
+            margin-bottom: 0.45rem;
+          }
+
+          .signup-page input,
+          .signup-page select {
+            display: block;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+            font: inherit;
+          }
+
+          .artisan-profile-fields {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 0.9rem;
+            width: 100%;
+            min-width: 0;
+            margin: 0;
+            padding: 1rem;
+            box-sizing: border-box;
+          }
+
+          .artisan-profile-fields legend {
+            padding: 0 0.4rem;
+            font-weight: 600;
+            color: #5b4636;
+          }
+
+          .artisan-profile-fields small {
+            display: block;
+            margin-top: 0.4rem;
+            line-height: 1.5;
+            color: #725846;
+          }
+
+          .artisan-profile-fields input[type="file"] {
+            padding: 0.6rem;
+          }
+
+          @media (max-width: 480px) {
+            .signup-page {
+              align-items: flex-start;
+            }
+
+            .form-box {
+              padding: 1.5rem 1.1rem;
+            }
           }
 
           label {
@@ -120,38 +192,94 @@ const Signup = () => {
         <h2>{t.createAccount}</h2>
 
         <form onSubmit={handleSubmit}>
-          <label>{t.fullName}</label>
+          <label htmlFor="signup-name">{t.fullName}</label>
           <input
+            id="signup-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            required
           />
 
-          <label>{t.email}</label>
+          <label htmlFor="signup-email">{t.email}</label>
           <input
+            id="signup-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            required
           />
 
-          <label>{t.password}</label>
+          <label htmlFor="signup-password">{t.password}</label>
           <input
+            id="signup-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            minLength={8}
+            required
           />
 
-          <label>{t.accountType}</label>
+          <label htmlFor="account-type">{t.accountType}</label>
           <select
+            id="account-type"
             value={accountType}
             onChange={(e) => setAccountType(e.target.value)}
+            required
           >
             <option value="customer">{t.customer}</option>
             <option value="artisan">{t.artisan}</option>
           </select>
 
-          <button type="submit" className="primary">
-            {t.createAccount}
+          {accountType === "artisan" && (
+            <fieldset className="artisan-profile-fields" style={{ border: "1px solid #c9b89c", borderRadius: "0.75rem" }}>
+              <legend>{t.artisanProfile}</legend>
+              <label htmlFor="artisan-location">{t.artisanLocation}</label>
+              <input
+                id="artisan-location"
+                type="text"
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                maxLength={120}
+                required
+              />
+
+              <label htmlFor="artisan-experience">{t.artisanExperience}</label>
+              <input
+                id="artisan-experience"
+                type="number"
+                min="0"
+                max="80"
+                step="1"
+                value={experience}
+                onChange={(event) => setExperience(event.target.value)}
+                required
+              />
+
+              <label htmlFor="artisan-craft">{t.artisanCraft}</label>
+              <input
+                id="artisan-craft"
+                type="text"
+                value={craft}
+                onChange={(event) => setCraft(event.target.value)}
+                maxLength={120}
+                required
+              />
+
+              <label htmlFor="artisan-photo">{t.artisanPhoto}</label>
+              <input
+                id="artisan-photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(event) => setProfilePhoto(event.target.files?.[0] || null)}
+                required
+              />
+              <small>{t.artisanPhotoRequirements}</small>
+            </fieldset>
+          )}
+
+          <button type="submit" className="primary" disabled={isSubmitting}>
+            {isSubmitting ? t.creatingAccount : t.createAccount}
           </button>
 
           <button

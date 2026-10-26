@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaShoppingCart, FaHeart, FaCreditCard, FaMicrophone, FaBell, FaGlobe, FaStore } from "react-icons/fa";
 import { translations } from "../utils/translations";
+import API from "../api";
 
 const Navbar = ({
   handleLogout,
@@ -14,6 +15,31 @@ const Navbar = ({
   const isLoggedIn = !!user;
   const canShop = ["customer", "artisan"].includes(user?.userType);
   const t = translations[currentLang] || translations.en;
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  const loadUnreadNotifications = useCallback(async () => {
+    if (!isLoggedIn || !canShop) {
+      setUnreadNotifications(0);
+      return;
+    }
+    try {
+      const response = await API.get("/ml/notifications");
+      setUnreadNotifications(response.data.filter((notification) => !notification.read).length);
+    } catch (error) {
+      console.error("Could not load notification count:", error);
+    }
+  }, [canShop, isLoggedIn]);
+
+  useEffect(() => {
+    loadUnreadNotifications();
+    if (!isLoggedIn || !canShop) return undefined;
+    const intervalId = window.setInterval(loadUnreadNotifications, 30000);
+    window.addEventListener("mittika:notifications-updated", loadUnreadNotifications);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("mittika:notifications-updated", loadUnreadNotifications);
+    };
+  }, [canShop, isLoggedIn, loadUnreadNotifications]);
 
   return (
     <nav className="main-nav" style={styles.nav}>
@@ -67,7 +93,11 @@ const Navbar = ({
         {/* AI Notification Bell */}
         <button style={styles.notifBellBtn} onClick={openNotifications} title={t.notifications}>
           <FaBell />
-          <span style={styles.notifBadge}>3</span>
+          {unreadNotifications > 0 && (
+            <span style={styles.notifBadge}>
+              {unreadNotifications > 99 ? "99+" : unreadNotifications}
+            </span>
+          )}
         </button>
 
         {canShop && (

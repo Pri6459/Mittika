@@ -1,11 +1,34 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FaMicrophone } from "react-icons/fa";
+import {
+  FaFacebookF,
+  FaInstagram,
+  FaMicrophone,
+  FaPinterestP,
+  FaTwitter
+} from "react-icons/fa";
 import { useLanguage } from "../utils/LanguageContext";
+import API from "../api";
+import { backendUrl } from "../utils/backendUrl";
 
 
 const Dashboard = ({ voiceSearchQuery }) => {
   const { t } = useLanguage();
+  const [artisans, setArtisans] = useState([]);
+  const [artisanLoadError, setArtisanLoadError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    API.get("/auth/artisans")
+      .then((response) => {
+        if (active) setArtisans(response.data.artisans || []);
+      })
+      .catch((error) => {
+        console.error("Could not load artisan profiles:", error);
+        if (active) setArtisanLoadError(true);
+      });
+    return () => { active = false; };
+  }, []);
+
   const productImages = [
     "art_1.png", "art_2.png", "art_3.png", "art_4.png",
     "art_1.png", "art_2.png", "art_3.png", "art_4.png"
@@ -20,25 +43,11 @@ const Dashboard = ({ voiceSearchQuery }) => {
     { img: "categ_spritual.png", title: t.spiritualArtCategory, to: "/spiritualcorner" }
   ];
 
-  const indianArts = [
-    { img: "macrame.png", title: t.macrameArt },
-    { img: "candle.png", title: t.candleArt, to: "/candle" },
-    { img: "pot.png", title: t.potteryArtCategory, to: "/pottery" },
-    { img: "jewel.png", title: t.handmadeJewellery, to: "/jewellery" },
-    { img: "sprit.png", title: t.handmadeSpiritual, to: "/spiritualcorner" }
-  ];
-
   const socialIcons = [
-    { img: "instagram-icon.png", alt: "Instagram" },
-    { img: "facebook-icon.png", alt: "Facebook" },
-    { img: "twitter-icon.png", alt: "Twitter" },
-    { img: "pinterest-icon.png", alt: "Pinterest" }
-  ];
-
-  const brands = [
-    { img: "amazon-logo.png", alt: "Amazon" },
-    { img: "myntra-logo.png", alt: "Myntra" },
-    { img: "blinkit-logo.png", alt: "Blinkit" }
+    { Icon: FaInstagram, alt: "Instagram" },
+    { Icon: FaFacebookF, alt: "Facebook" },
+    { Icon: FaTwitter, alt: "Twitter" },
+    { Icon: FaPinterestP, alt: "Pinterest" }
   ];
 
   return (
@@ -110,7 +119,7 @@ const Dashboard = ({ voiceSearchQuery }) => {
         {/* Categories Section */}
         <section className="dashboard-art-section" style={styles.artForms}>
           <h2 style={styles.sectionTitle}>{t.category}</h2>
-          <div style={styles.artGallery}>
+          <div className="dashboard-category-gallery" style={styles.artGallery}>
             {categories.map((item, i) => (
               <Link key={i} to={item.to} style={{ textDecoration: 'none', color: 'inherit' }}>
                 <div style={styles.artItem}>
@@ -124,35 +133,37 @@ const Dashboard = ({ voiceSearchQuery }) => {
           </div>
         </section>
 
-        {/* Indian Art Forms */}
-        <section className="dashboard-art-section" style={styles.artForms}>
-          <h2 style={styles.sectionTitle}>{t.indianArtForms}</h2>
-          <div style={styles.artGallery}>
-            {indianArts.map((item, i) => {
-              // Conditionally render a Link or a div based on the 'to' property
-              if (item.to) {
-                return (
-                  <Link key={i} to={item.to} style={{ textDecoration: 'none', color: 'inherit' }}>
-                    <div style={styles.artItem}>
-                      <div style={styles.artImageWrapper}>
-                        <img src={item.img} alt={item.title} style={styles.artImg} />
-                      </div>
-                      <p style={styles.artTitle}>{item.title}</p>
-                    </div>
-                  </Link>
-                );
-              }
-              return (
-                <div key={i} style={styles.artItem}>
-                  <div style={styles.artImageWrapper}>
-                    <img src={item.img} alt={item.title} style={styles.artImg} />
-                  </div>
-                  <p style={styles.artTitle}>{item.title}</p>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        {artisans.length > 0 && (
+          <section className="dashboard-art-section" style={styles.artForms}>
+            <h2 style={styles.sectionTitle}>{t.meetOurArtisans}</h2>
+            <p style={styles.artisanIntro}>{t.meetOurArtisansDescription}</p>
+            {artisanLoadError && <p role="status">{t.artisanProfilesFailed}</p>}
+            <div style={styles.artisanGallery}>
+              {artisans.map((artisan) => (
+                <article key={artisan.id} style={styles.artisanCard}>
+                  <img
+                    src={backendUrl(artisan.profilePhoto)}
+                    alt={artisan.name}
+                    style={styles.artisanPhoto}
+                  />
+                  <h3 style={styles.artisanName}>{artisan.name}</h3>
+                  {artisan.craft && <p style={styles.artisanDetail}>{artisan.craft}</p>}
+                  {artisan.location && <p style={styles.artisanDetail}>{artisan.location}</p>}
+                  <p style={styles.artisanDetail}>
+                    {artisan.experience} {t.yearsExperience}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {artisanLoadError && artisans.length === 0 && (
+          <section style={styles.artForms} role="status">
+            <h2 style={styles.sectionTitle}>{t.meetOurArtisans}</h2>
+            <p>{t.artisanProfilesFailed}</p>
+          </section>
+        )}
 
         {/* Map Section */}
         <section style={styles.mapSection}>
@@ -171,14 +182,6 @@ const Dashboard = ({ voiceSearchQuery }) => {
           </div>
         </section>
 
-        {/* Available On */}
-        <section style={styles.availableOn}>
-          <h3>{t.availableOn}</h3>
-          <div style={styles.brandLogos}>
-            {brands.map((b,i)=>(<img key={i} src={b.img} alt={b.alt} style={{width:100,height:"auto"}}/>))}
-          </div>
-        </section>
-
         {/* Newsletter */}
         <section style={styles.newsletter}>
           <p style={{marginBottom:"15px"}}>{t.subscribeText}</p>
@@ -194,28 +197,32 @@ const Dashboard = ({ voiceSearchQuery }) => {
             <div style={styles.footerColumn}>
               <h4>{t.aboutCompany}</h4>
               <ul style={styles.footerList}>
-                <li><a href="#">About us</a></li>
-                <li><a href="#">{t.reviews}</a></li>
-                <li><a href="#">{t.blog}</a></li>
-                <li><a href="#">{t.coupons}</a></li>
-                <li><a href="#">{t.faqs}</a></li>
+                <li><span style={styles.footerLink}>About us</span></li>
+                <li><span style={styles.footerLink}>{t.reviews}</span></li>
+                <li><span style={styles.footerLink}>{t.blog}</span></li>
+                <li><span style={styles.footerLink}>{t.coupons}</span></li>
+                <li><span style={styles.footerLink}>{t.faqs}</span></li>
               </ul>
             </div>
             <div style={styles.footerColumn}>
               <h4>{t.customerService}</h4>
               <ul style={styles.footerList}>
-                <li><a href="#">{t.trackOrder}</a></li>
-                <li><a href="#">{t.privacyPolicy}</a></li>
-                <li><a href="#">{t.shippingReturns}</a></li>
-                <li><a href="#">{t.bulkOrders}</a></li>
-                <li><a href="#">{t.termsConditions}</a></li>
-                <li><a href="#">{t.contactUs}</a></li>
+                <li><span style={styles.footerLink}>{t.trackOrder}</span></li>
+                <li><span style={styles.footerLink}>{t.privacyPolicy}</span></li>
+                <li><span style={styles.footerLink}>{t.shippingReturns}</span></li>
+                <li><span style={styles.footerLink}>{t.bulkOrders}</span></li>
+                <li><span style={styles.footerLink}>{t.termsConditions}</span></li>
+                <li><span style={styles.footerLink}>{t.contactUs}</span></li>
               </ul>
             </div>
             <div style={styles.footerColumn}>
               <h4>{t.followUs}</h4>
               <div style={styles.socialIcons}>
-                {socialIcons.map((icon,i)=>(<img key={i} src={icon.img} alt={icon.alt} style={{width:30,height:30,marginRight:10}}/>))}
+                {socialIcons.map(({ Icon, alt }) => (
+                  <span key={alt} role="img" aria-label={alt} style={styles.socialIcon}>
+                    <Icon aria-hidden="true" focusable="false" />
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -321,8 +328,14 @@ const styles = {
 
   artForms: { marginBottom: "60px" },
   sectionTitle: { fontSize: "2rem", fontWeight: 700, color: "#49352A", borderBottom: "3px solid #B45C38", paddingBottom: "8px", marginBottom: "30px" },
-  artGallery: { display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "stretch", gap: "24px" },
-  artItem: { width: "180px", height: "100%", textAlign: "center", transition: "transform 0.3s" },
+  artGallery: { display: "grid", alignItems: "start", gap: "clamp(10px, 1.5vw, 22px)" },
+  artisanIntro: { color: "#5B4636", textAlign: "center", marginTop: "-12px", marginBottom: "24px" },
+  artisanGallery: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "24px" },
+  artisanCard: { background: "#FFFDF9", border: "1px solid #E9D7C1", borderRadius: "18px", padding: "18px", textAlign: "center", boxShadow: "0 6px 20px rgba(0,0,0,0.08)" },
+  artisanPhoto: { width: "100%", maxWidth: "220px", aspectRatio: "1 / 1", objectFit: "cover", borderRadius: "50%", boxShadow: "0 5px 16px rgba(0,0,0,0.12)" },
+  artisanName: { color: "#49352A", margin: "14px 0 8px" },
+  artisanDetail: { color: "#725846", margin: "5px 0" },
+  artItem: { width: "100%", minWidth: 0, height: "100%", textAlign: "center", transition: "transform 0.3s" },
   artImageWrapper: { width: "100%", aspectRatio: "1 / 1", overflow: "hidden", borderRadius: "15px", boxShadow: "0 6px 20px rgba(0,0,0,0.1)", transition: "transform 0.3s, box-shadow 0.3s" },
   artImg: { width: "100%", height: "100%", objectFit: "cover", transition: "transform 0.3s", cursor: "pointer" },
   artTitle: { marginTop: "10px", fontWeight: 600, color: "#5B4636" },
@@ -330,19 +343,18 @@ const styles = {
   mapSection: { marginBottom: "60px" },
   mapContainer: { display: "flex", justifyContent:"center" },
 
-  availableOn: { textAlign:"center", marginBottom:"40px" },
-  brandLogos: { display:"flex", justifyContent:"center", gap:"25px", marginTop:"15px" },
-
   newsletter: { textAlign:"center", marginBottom:"60px", padding:"32px 24px", background:"#F4E9DA", borderRadius:"20px", border:"1px solid #E9D7C1" },
   subscribeForm: { display:"flex", justifyContent:"center", gap:"15px", marginTop:"15px" },
   input: { padding:"12px", width:"280px", borderRadius:"10px", border:"1px solid #C2A57B" },
   subscribeButton: { padding:"12px 25px", backgroundColor:"#AD5433", color:"#fff", border:"none", borderRadius:"10px", cursor:"pointer", transition:"0.3s" },
 
   footer: { backgroundColor:"#EFE0CC", padding:"50px 20px", borderRadius:"25px", border:"1px solid #E4D0B8" },
-  footerContent: { display:"flex", justifyContent:"space-between", flexWrap:"wrap" },
+  footerContent: { display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:"30px" },
   footerColumn: { flex:1, minWidth:"200px", marginBottom:"20px" },
-  footerList: { listStyle:"none", padding:0 },
-  socialIcons: { display:"flex", gap:"15px" }
+  footerList: { listStyle:"none", padding:0, marginTop:"6px", lineHeight:1.8 },
+  footerLink: { color:"#5B4636", textDecoration:"none" },
+  socialIcons: { display:"flex", alignItems:"center", gap:"16px", marginTop:"8px" },
+  socialIcon: { display:"inline-flex", alignItems:"center", justifyContent:"center", color:"#AD5433", fontSize:"22px", lineHeight:1 }
 };
 
 export default Dashboard;

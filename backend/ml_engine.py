@@ -65,13 +65,49 @@ class MittikaMLEngine:
     ]
 
     KEYWORD_MAP = {
-        "Pottery Art": ["pot", "clay", "ceramic", "vase", "diya", "pitcher", "earthen", "terracotta", "matka", "kulhad"],
-        "Handmade Jewellery": ["necklace", "earring", "pendant", "bracelet", "bangle", "jewel", "ring", "bead", "silver", "gold"],
-        "Rukhwat Art": ["rukhwat", "wedding", "trousseau", "marathi", "traditional", "doll", "festive", "groom", "bride", "thali"],
-        "Candle and Resin Art": ["candle", "wax", "resin", "scented", "fragrance", "soy", "wick", "coaster", "poured", "aroma"],
-        "Spiritual Art": ["pooja", "brass", "idol", "statue", "god", "ganesha", "krishna", "incense", "spiritual", "temple"],
-        "Home Decor": ["macrame", "wall hanging", "mirror", "pillow", "cushion", "decor", "rug", "tapestry", "lamp", "light"],
-        "Macrame & Woodwork": ["wood", "wooden", "tray", "macrame", "carved", "teak", "craft", "charkha"]
+        "Pottery Art": [
+            ("pottery", 2), ("clay", 1), ("ceramic", 1.5), ("vase", 1.5),
+            ("planter", 1.5), ("terracotta", 2), ("earthenware", 2),
+            ("pitcher", 1.5), ("jug", 1), ("kulhad", 2), ("matka", 2),
+            ("pot*", 1), ("diya", 0.5), ("bowl", 0.5), ("pottery art", 3),
+        ],
+        "Handmade Jewellery": [
+            ("jewellery", 3), ("jewelry", 3), ("necklace", 2), ("earring*", 2),
+            ("ear cuff*", 3), ("cuffling", 3), ("cufflink*", 2), ("cuff*", 1.5),
+            ("jhumka*", 2), ("maang tikka", 2.5), ("nose pin", 2),
+            ("toe ring*", 2), ("anklet*", 2), ("pendant", 2), ("bracelet", 2),
+            ("bangle*", 2), ("ring", 1.5), ("brooch", 2), ("bead*", 1),
+            ("kundan", 2), ("polki", 2), ("meenakari", 2), ("jewellery art", 3),
+        ],
+        "Rukhwat Art": [
+            ("rukhwat", 3), ("trousseau", 2.5), ("wedding", 1),
+            ("bridal", 1.5), ("groom", 1.5), ("wedding thali", 3),
+            ("miniature kitchen", 2), ("wedding display", 2),
+            ("marathi wedding", 2.5), ("rukhwat art", 3),
+        ],
+        "Candle and Resin Art": [
+            ("candle", 2), ("wax", 1.5), ("resin", 2), ("tealight", 2),
+            ("tea light", 2), ("wick", 1.5), ("scented candle", 2.5),
+            ("epoxy", 2), ("candle holder", 2.5), ("candle and resin", 3),
+        ],
+        "Spiritual Art": [
+            ("pooja", 2), ("puja", 2), ("spiritual", 2), ("deity", 2),
+            ("idol", 2), ("statue", 1), ("ganesha", 2.5), ("krishna", 2.5),
+            ("shiva", 2.5), ("incense", 2), ("temple", 1.5),
+            ("prayer", 1), ("aarti", 2), ("diya", 1), ("spiritual art", 3),
+        ],
+        "Home Decor": [
+            ("home decor", 3), ("home décor", 3), ("wall hanging", 2),
+            ("wall art", 2), ("wall decor", 2), ("wall décor", 2),
+            ("mirror", 2), ("rug", 2), ("tapestry", 2), ("cushion", 1.5),
+            ("furniture", 2), ("accent table", 2), ("clock", 1.5),
+            ("macrame", 2), ("wooden", 2), ("tray", 1.5),
+            ("lamp", 1), ("décor", 1), ("decor", 1),
+        ],
+        "Macrame & Woodwork": [
+            ("macrame", 2), ("woodwork", 2), ("wooden", 1.5), ("wood", 1),
+            ("carved wood", 2), ("wood carving", 2), ("charkha", 2),
+        ]
     }
 
     def __init__(self):
@@ -93,47 +129,38 @@ class MittikaMLEngine:
 
 
     def predict_category(self, title: str, description: str = "", image_name: str = "") -> dict:
-        """
-        CNN + NLP Hybrid Classification Model Simulation.
-        Combines NLP text token probability with visual CNN feature embedding simulation.
-        """
+        """Classify product text and image filenames using category-specific keywords."""
         combined_text = f"{title} {description} {image_name}".lower()
-        scores = {cat: 0.05 for cat in self.CATEGORIES}
+        scores = {cat: 0.0 for cat in self.CATEGORIES}
 
-        # NLP Keyword extraction & N-gram matching
-        for cat, keywords in self.KEYWORD_MAP.items():
-            for kw in keywords:
-                if re.search(r'\b' + re.escape(kw) + r'\b', combined_text):
-                    scores[cat] += 0.35
+        for category, keywords in self.KEYWORD_MAP.items():
+            for keyword, weight in keywords:
+                escaped = re.escape(keyword).replace(r"\ ", r"\s+")
+                if keyword.endswith("*"):
+                    escaped = re.escape(keyword[:-1]).replace(r"\ ", r"\s+") + r"\w*"
+                if re.search(r"\b" + escaped + r"\b", combined_text):
+                    scores[category] += weight
 
-        # CNN Visual Feature map simulation based on image hints
-        img_lower = image_name.lower()
-        if any(w in img_lower for w in ["pot", "clay", "terracotta"]):
-            scores["Pottery Art"] += 0.4
-        elif any(w in img_lower for w in ["jewel", "ring", "bead", "necklace"]):
-            scores["Handmade Jewellery"] += 0.4
-        elif any(w in img_lower for w in ["candle", "resin", "wax"]):
-            scores["Candle and Resin Art"] += 0.4
-        elif any(w in img_lower for w in ["rukhwat", "wedding"]):
-            scores["Rukhwat Art"] += 0.4
-        elif any(w in img_lower for w in ["sprit", "idol", "god"]):
-            scores["Spiritual Art"] += 0.4
-
-        # Normalize probabilities
         total = sum(scores.values())
-        normalized = {k: round(v / total, 3) for k, v in scores.items()}
+        if total == 0:
+            return {
+                "predictedCategory": "Uncertain",
+                "confidence": 0.0,
+                "modelType": "Keyword-based product classifier",
+                "probabilities": {category: 0.0 for category in self.CATEGORIES},
+            }
 
-        sorted_cats = sorted(normalized.items(), key=lambda x: x[1], reverse=True)
+        normalized = {category: score / total for category, score in scores.items()}
+        sorted_cats = sorted(normalized.items(), key=lambda item: item[1], reverse=True)
         top_cat, top_score = sorted_cats[0]
-
-        # Calculate model confidence score
-        confidence = min(0.98, max(0.72, round(top_score * 1.8, 2)))
+        confidence = round(scores[top_cat] / (total + 1), 2)
+        predicted_category = top_cat if confidence >= 0.55 else "Uncertain"
 
         return {
-            "predictedCategory": top_cat,
+            "predictedCategory": predicted_category,
             "confidence": confidence,
-            "modelType": "CNN + NLP Hybrid Engine (ResNet50 + BERT)",
-            "probabilities": dict(sorted_cats)
+            "modelType": "Keyword-based product classifier",
+            "probabilities": {category: round(score, 3) for category, score in sorted_cats}
         }
 
     def recommend(self, product_id: str, top_k: int = 5):

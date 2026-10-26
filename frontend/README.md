@@ -31,7 +31,11 @@ See the section about [deployment](https://facebook.github.io/create-react-app/d
 
 ## Product translations
 
-Product names and descriptions use reviewed Hindi or Marathi text when available. Product copy without a reviewed translation remains in English rather than displaying an unreliable machine translation. Reviewed translations are maintained in [backend/translations.py](../backend/translations.py).
+Product names and descriptions use reviewed Hindi or Marathi text when available. Other catalogue and artisan-submitted product text is translated with Google Cloud Translation. Configure `GOOGLE_CLOUD_TRANSLATE_API_KEY` in the backend environment (or `backend/.env`); the key must never be added to the frontend. If translation is unavailable or not configured, the API reports an error and the storefront displays its existing translation-unavailable notice instead of treating English as a successful translation. Reviewed translations are maintained in [backend/translations.py](../backend/translations.py).
+
+## Production deployment
+
+The production frontend reads `REACT_APP_API_BASE_URL` from `.env.production` when it is built. Set it to the public FastAPI URL before building and deploying to Firebase Hosting. The backend must also allow the frontend origin in its `CORS_ORIGINS` environment variable; for the current Firebase site, use `https://mittika-36f05.web.app`.
 
 ### `npm run eject`
 
